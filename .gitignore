@@ -25,3 +25,4 @@ Makefile.in
 .idea/
 build/
 config.h.in
+cmake-build-debug/
