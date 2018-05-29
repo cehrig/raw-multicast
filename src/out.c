@@ -49,6 +49,7 @@ int push_client (struct sockaddr_in *client)
 									 out_client.client_length
 									 * sizeof (struct sockaddr_in ));
 
+
 		out_mem = memcpy (out_client.client + ((out_client.client_length-1)),
 					  client, sizeof(struct sockaddr_in));
 
