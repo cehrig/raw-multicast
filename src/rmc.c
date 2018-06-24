@@ -3,6 +3,7 @@
 #endif
 
 #include "in.h"
+#include "dispatch.h"
 #include "out.h"
 #include <stdio.h>
 #include <ctype.h>
@@ -21,13 +22,13 @@ options:\n\
 	exit (1);
 }
 
-int main (int argc, char ** argv)
+int main (int argc, char **argv)
 {
 	int c, index;
 	unsigned char l_udp = 0;
 	char *l_host = NULL;
 	char *l_port = NULL;
-	pthread_t thread_in, thread_out;
+	pthread_t thread_in, thread_out, thread_dispatch;
 
 	opterr = 0;
 	while ((c = getopt (argc, argv, "hup:f")) != -1) {
@@ -60,7 +61,7 @@ int main (int argc, char ** argv)
 		printf ("Non-option argument %s\n", argv[index]);
 	}
 
-	if(!l_port) {
+	if (!l_port) {
 		usage (1);
 	}
 
@@ -68,17 +69,23 @@ int main (int argc, char ** argv)
 	 * Setting up input and output
 	 */
 	register_input ();
-	register_socket ((int) strtol (l_port, NULL, 10));
+	register_dispatch();
+	register_output ((int) strtol (l_port, NULL, 10));
 
 	/**
 	 * Starting input loop
 	 */
 	pthread_create (&thread_in, NULL, stdin_loop, NULL);
 
-	/**
-	 * Starting output loop
+    /**
+     * Starting output loop
+     */
+    pthread_create (&thread_out, NULL, out_loop, NULL);
+
+    /**
+	 * Starting dispatch monitor
 	 */
-	pthread_create (&thread_out, NULL, out_loop, NULL);
+    pthread_create (&thread_dispatch, NULL, monitor_queues, NULL);
 
 	/**
 	 * Waiting for threads to finish

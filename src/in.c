@@ -3,6 +3,7 @@
 #endif
 
 #include "in.h"
+#include "dispatch.h"
 #include "log.h"
 #include <unistd.h>
 #include <fcntl.h>
@@ -24,7 +25,9 @@ void register_input()
 	 */
 	#ifndef STDIN_FILENO
 	stdin = 0;
-	#endif
+    #else
+	stdin = STDIN_FILENO;
+    #endif
 
 	if(fcntl (stdin, F_GETFD) < 0) {
 		writelog (LOG_ERROR, "stdin is not a valid file descriptor");
@@ -33,8 +36,8 @@ void register_input()
 	/**
 	 * Setting stdin to non-blocking mode
 	 */
-	flags = fcntl(stdin, F_GETFL, 0);
-	if(fcntl (stdin, F_SETFL, flags | O_NONBLOCK) < 0) {
+	flags = fcntl (stdin, F_GETFL, 0);
+	if (fcntl (stdin, F_SETFL, flags | O_NONBLOCK) < 0) {
 		writelog (LOG_ERROR, "cannot set stdin to non-blocking mode");
 	}
 
@@ -45,36 +48,41 @@ void register_input()
 }
 
 /**
- *
+ * reading from stdin
  *
  * @param data
  * @return
  */
-void * stdin_loop(void * data)
+void * stdin_loop(void * mutex)
 {
-	int in_poll, read_bytes;
-	unsigned char in_data[4096];
+	int in_poll;
+	ssize_t read_bytes;
+
+	unsigned char in_data[RMC_IN_BUFFER];
 
 	do {
 		in_fd[0].revents = 0;
 		in_poll = poll (in_fd, 1, RMC_POLL_TIMEOUT);
 
 		/**
-		 * Error or timed out
+		 * error or timed out
 		 */
 		if (in_poll < 1) {
 			continue;
 		}
 
-		if (in_fd[0].revents & POLLHUP) {
-			writelog (LOG_ERROR, "remote end hung up");
+		while ((read_bytes = read (in_fd[0].fd, in_data, RMC_IN_BUFFER)) > 0) {
+			if (read_bytes < 1) {
+			    continue;
+			}
+
+			/* pushing data to dispatcher */
+			add_data ((size_t) read_bytes, in_data);
 		}
 
-		while ((read_bytes = read (in_fd[0].fd, in_data, 4096)) > 0) {
-			printf ("->read: %d \n", read_bytes);
-		}
-
-		printf ("-> %d \n", in_poll);
+        if (in_fd[0].revents & POLLHUP) {
+            writelog (LOG_ERROR, "remote end hung up");
+        }
 	} while (1);
 
 	return NULL;

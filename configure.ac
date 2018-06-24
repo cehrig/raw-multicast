@@ -12,8 +12,14 @@ AC_DEFINE([RMC_POLL_TIMEOUT], [2000],
             [Number of Milliseconds that poll should block waiting for a file
             desriptor to become ready...])
 
+AC_DEFINE([RMC_IN_BUFFER], [4096],
+            [Number of bytes to read from stdin])
+
 AC_DEFINE([RMC_OUT_BUFFER], [1024],
             [Number of bytes to read when new client connects])
+
+AC_DEFINE([RMC_DISPATCH_CHUNKSIZE], [4096],
+            [Number of bytes to push to clients sequentially])
 
 # Checks for programs.
 AC_PROG_CC
