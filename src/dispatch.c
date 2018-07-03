@@ -8,13 +8,17 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <time.h>
 
 out_client_t out_client;
-pthread_mutex_t mtx_dispatch;
+pthread_mutex_t mtx_dispatch, mtx_cond_dispatch;
+pthread_cond_t cond_dispatch;
 
 void register_dispatch ()
 {
     pthread_mutex_init(&mtx_dispatch, NULL);
+    pthread_mutex_init(&mtx_cond_dispatch, NULL);
+    pthread_cond_init(&cond_dispatch, NULL);
 
     /**
      * No clients at the beginning
@@ -142,6 +146,7 @@ void add_data (size_t len, unsigned char * data)
 
     push_data_to_clients (len, data);
     pthread_mutex_unlock(&mtx_dispatch);
+    pthread_cond_signal(&cond_dispatch);
 }
 
 out_queue_wrapper_t * prepare_push(out_client_data_t *client)
@@ -154,13 +159,11 @@ out_queue_wrapper_t * prepare_push(out_client_data_t *client)
 
     do {
         ur_len = client->data_len;
-        if(ur_len > RMC_DISPATCH_CHUNKSIZE) {
+        if (ur_len > RMC_DISPATCH_CHUNKSIZE) {
             len = RMC_DISPATCH_CHUNKSIZE;
         } else {
             len = client->data_len;
         }
-
-        writelog(LOG_DEBUG, "ready: %d", len);
 
         l_len -= len;
         unsigned char * left_mem = calloc (l_len, sizeof (unsigned char));
@@ -169,31 +172,34 @@ out_queue_wrapper_t * prepare_push(out_client_data_t *client)
         memcpy (pass->data + pass->data_len, client->data, len);
         memcpy(left_mem, client->data+len, l_len);
 
-        //
+        free(client->data);
+
         pass->data_len += len;
         client->data_len = l_len;
         client->data = left_mem;
     } while(client->data_len > 0);
-
-    writelog(LOG_DEBUG, "-> %d - %d", pass->data_len, client->data_len);
 
     return pass;
 }
 
 void * monitor_queues (void *data)
 {
-    int i;
+    int i, r ;
     out_client_data_t *it = NULL;
     out_queue_wrapper_t *wrapper = NULL;
 
     while(1) {
-
+        pthread_mutex_lock(&mtx_cond_dispatch);
+        pthread_cond_wait(&cond_dispatch, &mtx_cond_dispatch);
         pthread_mutex_lock(&mtx_dispatch);
+
+        //writelog(LOG_DEBUG, "running");
 
         it = out_client.clients;
         for (i = 0; i < out_client.client_length; i++) {
 
             if (it->data_len > 0) {
+                r++;
                 wrapper = prepare_push(it);
                 send_out (it->client, wrapper->data, wrapper->data_len);
                 free (wrapper->data);
@@ -203,6 +209,7 @@ void * monitor_queues (void *data)
         }
 
         pthread_mutex_unlock(&mtx_dispatch);
+        pthread_mutex_unlock(&mtx_cond_dispatch);
 
     }
 
